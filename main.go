@@ -43,22 +43,34 @@ func knapsack_split(c *ChanCollection, call FuncCall) {
 
 	// Loop through each element
 	// Assume all prior elements zero and search space for this one
+	localBest := call.curValue
 	for i := call.k.Len()-1; i >= call.idx; i-- {
 		// Start the search ommiting this element == 0 (will be covered by another call)
 		if call.capacity - call.k.Get(i).Weight >= 0 {
-			if len(c.work) < cap(c.work) && !isTail(i, call.k.Len()) {
-				c.work <- FuncCall{i,
+			newcall := FuncCall{i,
 						call.capacity - call.k.Get(i).Weight,
 						call.k,
 						call.k.Get(i).Value + call.curValue}
-			} else { // If the work queue is full, do some work right now
-				c.res <- knapsack_rec(c,FuncCall{i, 
+
+			// If already no more improvements possible, don't even bother a worker
+			if !newcall.canImprove(localBest) {
+				c.res <- localBest
+				continue
+			}
+
+			// Send some work to a worker
+			if len(c.work) < cap(c.work) && !newcall.isTail() {
+				c.work <- newcall
+			} else { // If the work queue is full or there is not much to be done (tail), do some work right now
+				localBest = Max(localBest, knapsack_rec(c,FuncCall{i, 
 												call.capacity - call.k.Get(i).Weight,
 												call.k,
-												call.curValue + call.k.Get(i).Value})
+												call.curValue + call.k.Get(i).Value}))
+				c.res <- localBest
 			}
 		} else {
-			c.res <- call.curValue
+			// Just fill the result channel, nothing new gained here
+			c.res <- localBest
 		}
 	}
 }

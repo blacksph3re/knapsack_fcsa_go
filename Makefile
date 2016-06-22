@@ -6,6 +6,7 @@ run:
 
 profile:
 	cat input/medium.in | ./knapsack -n 1 -cpuprofile=knapsack.prof
+	#go tool pprof knapsack knapsack.prof
 
 scalingtest:
 	sh ./scalingtest.sh
