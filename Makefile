@@ -11,7 +11,7 @@ profile:
 scalingtest:
 	sh ./scalingtest.sh
 
-input:
+inputhuge:
 	python inputer.py -n 50000000 -m 100000 > input/huge.in
 
 inputmed:
