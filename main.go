@@ -209,15 +209,10 @@ func worker(c *ChanCollection) {
 		// We need a select here as last item might be stolen
 		select {
 			case inv := <- c.work : {
-				start := time.Now()
 				if inv.canImprove(bestRes) {
 					c.res <- knapsack_rec(c, inv)
 				} else {
 					c.res <- 0
-				}
-				dif := time.Since(start)
-				if dif > 5*time.Second {
-					fmt.Println("Long invocation: %v, total time: %v", inv, dif)
 				}
 			}
 			case res := <- c.workerfinished: {
@@ -282,6 +277,8 @@ func gatherer(c *ChanCollection, finalres chan int, numWorkerThreads int) {
 
 
 func main() {
+	start := time.Now()
+
 	var numWorkerThreads int =  1
 	flag.IntVar(&numWorkerThreads, "n", 1, "Number of threads");
 	var cpuprofile = flag.String("cpuprofile", "", "Enable CPU profiling, write to passed file")
@@ -296,12 +293,18 @@ func main() {
             return
         }
         pprof.StartCPUProfile(f)
-        fmt.Println("profiling")
+        if outputInfo {
+        	fmt.Println("Running with profiling enabled")
+        }
         defer pprof.StopCPUProfile()
     }
 
+    beforeparse := time.Now()
+
 	// Read the knapsack from command line
 	k := ReadKnapsack()
+
+	beforecalc := time.Now()
 
 	if outputInfo {
 		fmt.Println("Knapsack size:", k.Len(), "capacity:", k.Capacity)
@@ -331,4 +334,9 @@ func main() {
 	// Collect results
 	maxRes := <-finalres
 	fmt.Println(maxRes)
+
+	end := time.Now()
+	if outputInfo {
+		fmt.Printf("Durations, \n--parsing cmdline args: %v \n--parsing stdin: %v \n--searching best value: %v \n--total: %v \n", beforeparse.Sub(start), beforecalc.Sub(beforeparse), end.Sub(beforecalc), end.Sub(start))
+	}
 }

@@ -2,11 +2,14 @@ build:
 	go build -o knapsack
 
 run:
-	cat input/large.in | ./knapsack -n 64
+	cat input/huge.in | ./knapsack -n 128
 
 profile:
-	cat input/medium.in | ./knapsack -n 1 -cpuprofile=knapsack.prof
+	cat input/medhuge.in | ./knapsack -n 1 -cpuprofile=knapsack.prof
 	#go tool pprof knapsack knapsack.prof
 
 scalingtest:
 	sh ./scalingtest.sh
+
+input:
+	python inputer.py -n 50000000 -m 100000 > input/huge.in

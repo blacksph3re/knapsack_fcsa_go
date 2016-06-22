@@ -2,6 +2,9 @@ package main
 
 import "fmt"
 import "sort"
+import "bufio"
+import "strconv"
+import "os"
 
 type Item struct {
 	Value int
@@ -35,10 +38,26 @@ func ReadKnapsack() *Knapsack {
 	var count int
 	fmt.Scanln(&count, &retval.Capacity)
 	retval.Items = make([]Item, count)
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Split(bufio.ScanWords)
 	for idx,_ := range retval.Items {
-		var value, weight int
-		fmt.Scanln(&value, &weight)
-		retval.Items[idx] = NewItem(value, weight, retval.Capacity)
+
+		if !scanner.Scan() {
+			fmt.Println("Error parsing Stdin")
+			break
+		}
+		value, err1 := strconv.Atoi(scanner.Text())
+		if !scanner.Scan() || err1!=nil {
+			fmt.Println("Error parsing Stdin")
+			break
+		}
+		weight, err2 := strconv.Atoi(scanner.Text())
+		if err2!=nil {
+			fmt.Println("Error parsing Stdin")
+			break
+		}
+
+		retval.Items[idx] = NewItem(int(value), int(weight), retval.Capacity)
 	}
 	sort.Sort(retval)
 	return retval
