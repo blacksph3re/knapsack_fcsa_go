@@ -2,7 +2,10 @@ build:
 	go build -o knapsack
 
 run:
-	cat input/large2.in | ./knapsack 2
+	cat input/large.in | ./knapsack -n 64
+
+profile:
+	cat input/medium.in | ./knapsack -n 1 -cpuprofile=knapsack.prof
 
 scalingtest:
 	sh ./scalingtest.sh

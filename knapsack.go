@@ -50,17 +50,3 @@ func Max(a, b int) int {
 	}
 	return a
 }
-
-func Knapsack_rec(idx, capacity int, k *Knapsack) int {
-	if idx >= k.Len() {
-		return 0
-	}
-	var v, w, r int
-
-	for capacity-w >= 0 {
-		r = Max(r, v + Knapsack_rec(idx+1, capacity-w, k))
-		v += k.Get(idx).Value
-		w += k.Get(idx).Weight
-	}
-	return r
-}

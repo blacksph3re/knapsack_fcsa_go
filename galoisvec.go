@@ -31,3 +31,19 @@ func (x *GaloisVec) Add(step int) int {
 	}
 	return carry
 }
+
+// Checks the galoisfield for wrong elements and emulates carry behavior at that place
+// Useful if you increased an element somewhere in the vec and want to make sure it's still a GF
+func (x *GaloisVec) Check() int {
+	carry := 0
+	for idx,_ := range x.N {
+		x.N[idx] += carry
+		carry = x.N[idx]/x.Limit[idx]
+		x.N[idx] = x.N[idx]%x.Limit[idx]
+	}
+	return carry
+}
+
+func (x *GaloisVec) Get(idx int) int {
+	return x.N[idx]
+}
