@@ -16,3 +16,6 @@ inputhuge:
 
 inputmed:
 	python inputer.py -n 10000000 -m 100000 > input/medhuge.in
+
+inputcseq:
+	python inputer.py -m 300 -m 100 > input/large4.in

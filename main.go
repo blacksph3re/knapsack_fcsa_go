@@ -9,7 +9,7 @@ import "flag"
 import "runtime/pprof"
 
 const outputInfo = true
-const workCapacity = 10000
+const workCapacity = 1000
 
 type FuncCall struct {
 	idx int
@@ -44,6 +44,7 @@ func knapsack_split(c *ChanCollection, call FuncCall) {
 	// Loop through each element
 	// Assume all prior elements zero and search space for this one
 	localBest := call.curValue
+	voidResults := 0
 	for i := call.k.Len()-1; i >= call.idx; i-- {
 		// Start the search ommiting this element == 0 (will be covered by another call)
 		if call.capacity - call.k.Get(i).Weight >= 0 {
@@ -54,12 +55,12 @@ func knapsack_split(c *ChanCollection, call FuncCall) {
 
 			// If already no more improvements possible, don't even bother a worker
 			if !newcall.canImprove(localBest) {
-				c.res <- localBest
+				voidResults++
 				continue
 			}
 
 			// Send some work to a worker
-			if len(c.work) < cap(c.work) && !newcall.isTail() {
+			if !newcall.isTail() {
 				c.work <- newcall
 			} else { // If the work queue is full or there is not much to be done (tail), do some work right now
 				localBest = Max(localBest, knapsack_rec(c,FuncCall{i, 
@@ -70,9 +71,13 @@ func knapsack_split(c *ChanCollection, call FuncCall) {
 			}
 		} else {
 			// Just fill the result channel, nothing new gained here
-			c.res <- localBest
+			voidResults++
 		}
 	}
+
+	// Tell the gatherer there is less work to be gathered
+	c.newwork <- -voidResults
+	<-c.ack
 }
 
 func knapsack_rec(c *ChanCollection, call FuncCall) int {
@@ -103,8 +108,7 @@ func knapsack_rec(c *ChanCollection, call FuncCall) int {
 	return r
 }
 
-func knapsack_dim(c *ChanCollection, call FuncCall) int {
-	numDimensions := 70
+func knapsack_dim(c *ChanCollection, call FuncCall, numDimensions int) int {
 	until := call.idx + numDimensions
 	allDims := false
 	if until >= call.k.Len() {
@@ -201,16 +205,22 @@ func knapsack_dim(c *ChanCollection, call FuncCall) int {
 }
 
 
-func worker(c *ChanCollection) {
+func worker(c *ChanCollection, numWorkerThreads int) {
 	// While work channel is not empty, invoke a knapsack_rec and send the result back
 	running := true
 	bestRes := 0
+	localWork := 0
 	for running {
 		// We need a select here as last item might be stolen
 		select {
 			case inv := <- c.work : {
 				if inv.canImprove(bestRes) {
-					c.res <- knapsack_rec(c, inv)
+					if len(c.work) < numWorkerThreads*2 {
+						c.res <- knapsack_dim(c, inv, 3)
+					} else {
+						c.res <- knapsack_rec(c ,inv)
+					}
+					localWork++
 				} else {
 					c.res <- 0
 				}
@@ -224,6 +234,9 @@ func worker(c *ChanCollection) {
 				}
 			}
 		}
+	}
+	if outputInfo {
+		//fmt.Println("Worker load: ", localWork)
 	}
 }
 
@@ -255,10 +268,16 @@ func gatherer(c *ChanCollection, finalres chan int, numWorkerThreads int) {
 			case newWork := <- c.newwork: {
 				totalWork += newWork
 				c.ack <- true
+				if work >= totalWork {
+					for i:=0; i<numWorkerThreads; i++ {
+						c.workerfinished <- -1
+					}
+					running = false
+				}
 			}
 			case <- tick: {
 				if outputInfo {
-						fmt.Printf("Gatherer state: %v items of %v (diff: %v), best: %v\n", work, totalWork, totalWork-work, maxRes)
+						fmt.Printf("Gatherer state: %v items of %v (diff: %v), workqueue: %v\n", work, totalWork, totalWork-work, len(c.work))
 				}
 			}
 
@@ -272,6 +291,10 @@ func gatherer(c *ChanCollection, finalres chan int, numWorkerThreads int) {
 	}
 
 	finalres <- maxRes
+
+	if outputInfo {
+		fmt.Printf("Gatherer total work: %v\n", work)
+	}
 }
 
 
@@ -286,6 +309,13 @@ func main() {
 
 	flag.Parse()
 
+    beforeparse := time.Now()
+
+	// Read the knapsack from command line
+	k := ReadKnapsack()
+
+	fmt.Printf("Estimate: %v\n", (k.Capacity / k.Items[k.Len()-1].Weight) * k.Items[k.Len()-1].Value)
+
 	if *cpuprofile != "" {
         f, err := os.Create(*cpuprofile)
         if err != nil {
@@ -294,15 +324,10 @@ func main() {
         }
         pprof.StartCPUProfile(f)
         if outputInfo {
-        	fmt.Println("Running with profiling enabled")
+        	fmt.Println("Starting profiling")
         }
         defer pprof.StopCPUProfile()
     }
-
-    beforeparse := time.Now()
-
-	// Read the knapsack from command line
-	k := ReadKnapsack()
 
 	beforecalc := time.Now()
 
@@ -315,7 +340,7 @@ func main() {
 	// Add some buffer in the channels so we won't end up with send-blocking threads
 	c := ChanCollection{
 		work: make(chan FuncCall, workCapacity + k.Len()),
-		res: make(chan int, numWorkerThreads*2),
+		res: make(chan int, numWorkerThreads + k.Len()),
 		workerfinished: make(chan int, numWorkerThreads+2),
 		newwork: make(chan int, numWorkerThreads+2),
 		ack: make(chan bool, numWorkerThreads+2)}
@@ -325,11 +350,10 @@ func main() {
 	go gatherer(&c, finalres, numWorkerThreads)
 
 	for i := 0; i < numWorkerThreads; i++ {
-		go worker(&c)
+		go worker(&c, numWorkerThreads)
 	}
 
 	knapsack_split(&c, FuncCall{0, k.Capacity, k, 0})
-	
 
 	// Collect results
 	maxRes := <-finalres
